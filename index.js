@@ -187,11 +187,11 @@ export default class Carousel extends Component {
         const { start, end } = this._positions[activeItem];
         const itemCenter = ( start + end ) / 2;
         if (velocity < 0) {
-            if (centerX > itemCenter + offset) {
+            if (centerX > itemCenter + (offset - 10)) {
                 return Math.min(activeItem + 1, this._positions.length - 1);
             }
         } else {
-            if (centerX < itemCenter - offset) {
+            if (centerX < itemCenter - (offset - 10)) {
                 return Math.max(activeItem - 1, 0);
             }
         }
