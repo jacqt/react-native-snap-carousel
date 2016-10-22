@@ -122,13 +122,14 @@ export default class Carousel extends Component {
         this._initInterpolators = this._initInterpolators.bind(this);
         this._onTouchRelease = props.autoplay ? this._onTouchRelease.bind(this) : undefined;
         this._onTouchMove = props.autoplay ? this._onTouchMove.bind(this) : undefined;
+        this.previousOffset = 0;
     }
 
     componentDidMount () {
         const { firstItem, autoplay } = this.props;
 
         this._initInterpolators(this.props);
-        this.snapToItem(firstItem, false, false);
+        this.snapToItem(firstItem, false, true);
         if (autoplay) {
             this.startAutoplay();
         }
@@ -166,7 +167,7 @@ export default class Carousel extends Component {
         let interpolators = [];
 
         items.forEach((item, index) => {
-            interpolators.push(new Animated.Value(index === firstItem ? 1 : 0));
+            interpolators.push(new Animated.Value(0));
         });
         this.setState({ interpolators });
     }
@@ -181,6 +182,22 @@ export default class Carousel extends Component {
         return 0;
     }
 
+    _getNextActiveItem(centerX, velocity, offset=25) {
+        const activeItem = this._getActiveItem(centerX, offset);
+        const { start, end } = this._positions[activeItem];
+        const itemCenter = ( start + end ) / 2;
+        if (velocity < 0) {
+            if (centerX > itemCenter + offset) {
+                return Math.min(activeItem + 1, this._positions.length - 1);
+            }
+        } else {
+            if (centerX < itemCenter - offset) {
+                return Math.max(activeItem - 1, 0);
+            }
+        }
+        return activeItem;
+    }
+
     _getCenterX (event) {
         const { sliderWidth, itemWidth } = this.props;
         const containerSideMargin = (sliderWidth - itemWidth) / 2;
@@ -193,33 +210,41 @@ export default class Carousel extends Component {
         const { activeItem } = this.state;
         const newActiveItem = this._getActiveItem(this._getCenterX(event));
 
+        this._doVelocitySnap(event);
+
         if (activeItem !== newActiveItem) {
-            Animated[animationFunc](
-                this.state.interpolators[activeItem],
-                { ...animationOptions, toValue: 0 }
-            ).start();
-            this.setState({ activeItem: newActiveItem });
-            Animated[animationFunc](
-                this.state.interpolators[newActiveItem],
-                { ...animationOptions, toValue: 1 }
-            ).start();
+            // Animated[animationFunc](
+            //     this.state.interpolators[activeItem],
+            //     { ...animationOptions, toValue: 0 }
+            // ).start();
+            // this.setState({ activeItem: newActiveItem });
+            // Animated[animationFunc](
+            //     this.state.interpolators[newActiveItem],
+            //     { ...animationOptions, toValue: 1 }
+            // ).start();
+        }
+    }
+
+    _doVelocitySnap(event) {
+        const currentOffset = event.nativeEvent.contentOffset.x;
+        const velocity = this.previousOffset - currentOffset;
+        this.previousOffset = currentOffset;
+        if (Math.abs(velocity) < 10) {
+            if (this._snapEnabled && !this.snapping && !this.dragging) {
+                this.snapToItem(this._getNextActiveItem(this._getCenterX(event), velocity));
+            }
         }
     }
 
     _onScrollBegin (event) {
         this._scrollStartX = event.nativeEvent.contentOffset.x;
         this._scrollStartActive = this.state.activeItem;
+        this.dragging = true
     }
 
     _onScrollEndDrag (event) {
-        this._scrollEndX = event.nativeEvent.contentOffset.x;
-        this._scrollEndActive = this.state.activeItem;
-
-        const deltaX = this._scrollEndX - this._scrollStartX;
-
-        if (this._snapEnabled) {
-            this._snapScroll(deltaX);
-        }
+        this.dragging = false;
+        this._doVelocitySnap(event);
     }
 
     _onTouchMove () {
@@ -320,6 +345,7 @@ export default class Carousel extends Component {
     }
 
     snapToItem (index, animated = true, fireCallback = true) {
+        this.snapping = true;
         const itemsLength = this._positions.length;
 
         if (index >= itemsLength) {
@@ -333,6 +359,10 @@ export default class Carousel extends Component {
         const snapX = this._positions[index].start;
         this.refs.scrollview.scrollTo({x: snapX, y: 0, animated});
         this.props.onSnapToItem && fireCallback && this.props.onSnapToItem(index);
+
+        setTimeout(() => {
+            this.snapping = false;
+        }, 1000);
     }
 
     render () {
@@ -360,6 +390,7 @@ export default class Carousel extends Component {
               onResponderRelease={this._onTouchRelease}
               onResponderMove={this._onTouchMove}
               onScroll={this._onScroll}
+              decelerationRate={0.7}
               scrollEventThrottle={50}
               >
                 { this.items }
